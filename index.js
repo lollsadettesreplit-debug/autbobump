@@ -22,14 +22,7 @@ console.log('⚠️  Educational use only');
 
 // ==================== CLIENT ====================
 const client = new Client({
-  checkUpdate: false,
-  ws: {
-    properties: {
-      $os: 'linux',
-      $browser: 'chrome',
-      $device: 'desktop'
-    }
-  }
+  checkUpdate: false
 });
 
 let isConnected = false;
@@ -44,7 +37,7 @@ async function sendBump() {
       headers: {
         'Authorization': USER_TOKEN,
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0'
       },
       body: JSON.stringify({
         type: 2,
@@ -54,10 +47,8 @@ async function sendBump() {
         data: {
           id: BUMP_COMMAND_ID,
           name: "bump",
-          type: 1,
-          options: []
-        },
-        nonce: Date.now().toString()
+          type: 1
+        }
       })
     });
 
@@ -66,8 +57,7 @@ async function sendBump() {
       console.log('⏰ Next bump in 2 hours');
       return true;
     } else {
-      const text = await response.text();
-      console.log(`❌ Bump failed (${response.status}): ${text.substring(0, 100)}`);
+      console.log('❌ Bump failed:', response.status);
       return false;
     }
   } catch (error) {
@@ -79,73 +69,45 @@ async function sendBump() {
 // ==================== CLIENT EVENTS ====================
 client.on('ready', () => {
   console.log(`✅ Connected as ${client.user.tag}`);
-  console.log(`🆔 User ID: ${client.user.id}`);
   isConnected = true;
   
-  // Send first bump immediately
-  setTimeout(() => sendBump(), 5000);
+  // Send first bump
+  sendBump();
   
-  // Schedule bumps every 2 hours (7200000 ms)
+  // Schedule bumps every 2 hours
   setInterval(() => {
     sendBump();
   }, 7200000);
 });
 
-client.on('disconnect', () => {
-  console.log('🔌 Disconnected from Discord');
-  isConnected = false;
-});
-
 // ==================== WEB SERVER ====================
 const app = express();
-const PORT = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
   res.json({
     status: isConnected ? 'online' : 'connecting',
-    service: 'discord-bump-bot',
-    connected_as: client.user?.tag || 'Not connected',
-    next_bump: 'Every 2 hours',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
+    user: client.user?.tag || 'Not connected'
   });
 });
 
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
-// ==================== STARTUP ====================
-async function start() {
-  try {
-    // Start web server first
-    app.listen(PORT, () => {
-      console.log(`🌐 Web server on port ${PORT}`);
-      console.log(`📊 Health: http://localhost:${PORT}`);
-    });
-    
-    // Connect to Discord
-    console.log('🔑 Connecting to Discord...');
-    await client.login(USER_TOKEN);
-    
-  } catch (error) {
-    console.error('❌ Failed to start:', error.message);
-    process.exit(1);
-  }
-}
-
-// ==================== GRACEFUL SHUTDOWN ====================
-process.on('SIGTERM', () => {
-  console.log('🛑 Shutting down gracefully...');
-  client.destroy();
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('🛑 Shutting down...');
-  client.destroy();
-  process.exit(0);
+  res.send('OK');
 });
 
 // ==================== START ====================
-start();
+const PORT = process.env.PORT || 10000;
+
+app.listen(PORT, () => {
+  console.log(`🌐 Web server on port ${PORT}`);
+});
+
+client.login(USER_TOKEN).catch(error => {
+  console.error('❌ Login failed:', error.message);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  client.destroy();
+  process.exit(0);
+});
